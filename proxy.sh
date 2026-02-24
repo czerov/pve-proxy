@@ -1,75 +1,81 @@
 #!/bin/bash
 
-# 定义函数以隔离变量
-proxy_helper() {
-    local DEFAULT_IP="192.168.5.102"
-    local DEFAULT_PORT="7897"
-    local APT_CONF="/etc/apt/apt.conf.d/99proxy"
-    local YELLOW='\033[1;33m'
-    local GREEN='\033[0;32m'
-    local RED='\033[0;31m'
-    local NC='\033[0m'
+# --- 默认配置 ---
+DEFAULT_IP="192.168.5.102"
+DEFAULT_PORT="7897"
+APT_CONF="/etc/apt/apt.conf.d/99proxy"
 
-    while true; do
-        clear
-        echo -e "${YELLOW}=== PVE LXC 代理助手 ===${NC}"
-        
-        # 状态检查 [cite: 3]
-        if [ -f "$APT_CONF" ]; then
-            echo -e "APT 代理: ${GREEN}已开启${NC}"
-        else
-            echo -e "APT 代理: ${RED}已关闭${NC}"
-        fi
+# 颜色
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m'
 
-        # 连通性探测 [cite: 4]
-        echo -n "检测代理 $DEFAULT_IP:$DEFAULT_PORT... "
-        if timeout 1 bash -c "cat < /dev/null > /dev/tcp/$DEFAULT_IP/$DEFAULT_PORT" 2>/dev/null; then
-            echo -e "${GREEN}正常${NC}"
-        else
-            echo -e "${RED}无法连接${NC}"
-        fi
+while true; do
+    clear
+    echo -e "${YELLOW}=== PVE LXC 代理助手 (Debian 13) ===${NC}"
+    
+    # 检查 APT 配置文件是否存在
+    if [ -f "$APT_CONF" ]; then
+        echo -e "系统代理状态: ${GREEN}【已开启】${NC}"
+    else
+        echo -e "系统代理状态: ${RED}【已关闭】${NC}"
+    fi
 
-        echo "--------------------------------"
-        echo "1. 开启代理 (默认地址)"
-        echo "2. 手动输入代理"
-        echo "3. 关闭并清除代理"
-        echo "4. 刷新状态"
-        echo "5. 退出"
-        echo "--------------------------------"
-        read -p "选择 [1-5]: " CHOICE
+    # 探测代理服务器
+    echo -n "代理服务器探测 ($DEFAULT_IP:$DEFAULT_PORT): "
+    if timeout 1 bash -c "cat < /dev/null > /dev/tcp/$DEFAULT_IP/$DEFAULT_PORT" 2>/dev/null; then
+        echo -e "${GREEN}在线 (Active)${NC}"
+    else
+        echo -e "${RED}离线 (Offline)${NC}"
+    fi
 
-        case "$CHOICE" in
-            1)
-                TARGET="$DEFAULT_IP:$DEFAULT_PORT"
-                echo "Acquire::http::Proxy \"http://$TARGET\";" > $APT_CONF [cite: 6]
-                echo "Acquire::https::Proxy \"http://$TARGET\";" >> $APT_CONF [cite: 7]
-                export http_proxy="http://$TARGET" [cite: 7]
-                export https_proxy="http://$TARGET" [cite: 7]
-                echo -e "${GREEN}代理已启用${NC}"
-                sleep 1
-                ;;
-            2)
-                read -p "IP: " IN_IP
-                read -p "端口: " IN_PORT
-                TARGET="${IN_IP:-$DEFAULT_IP}:${IN_PORT:-$DEFAULT_PORT}" [cite: 8]
-                echo "Acquire::http::Proxy \"http://$TARGET\";" > $APT_CONF [cite: 9]
-                echo "Acquire::https::Proxy \"http://$TARGET\";" >> $APT_CONF [cite: 10]
-                export http_proxy="http://$TARGET" [cite: 10]
-                export https_proxy="http://$TARGET" [cite: 10]
-                sleep 1
-                ;;
-            3)
-                rm -f $APT_CONF [cite: 11]
-                unset http_proxy https_proxy all_proxy [cite: 11]
-                echo -e "${RED}代理已关闭${NC}"
-                sleep 1
-                ;;
-            4) continue ;; [cite: 12]
-            5) break ;; [cite: 13]
-            *) echo "无效选项"; sleep 1 ;; [cite: 14]
-        esac
-    done
-}
+    echo "--------------------------------"
+    echo "1. 开启代理 (使用默认地址)"
+    echo "2. 手动输入代理地址并开启"
+    echo "3. 关闭代理"
+    echo "4. 刷新状态"
+    echo "5. 退出"
+    echo "--------------------------------"
+    read -p "请选择 [1-5]: " CHOICE
 
-# 执行函数
-proxy_helper
+    case "$CHOICE" in
+        1)
+            TARGET_ADDR="$DEFAULT_IP:$DEFAULT_PORT"
+            echo "Acquire::http::Proxy \"http://$TARGET_ADDR\";" > $APT_CONF
+            echo "Acquire::https::Proxy \"http://$TARGET_ADDR\";" >> $APT_CONF
+            export http_proxy="http://$TARGET_ADDR"
+            export https_proxy="http://$TARGET_ADDR"
+            echo -e "${GREEN}已开启! APT 现已走代理。${NC}"
+            sleep 1
+            ;;
+        2)
+            read -p "请输入 IP: " IN_IP
+            read -p "请输入端口: " IN_PORT
+            TARGET_ADDR="${IN_IP:-$DEFAULT_IP}:${IN_PORT:-$DEFAULT_PORT}"
+            echo "Acquire::http::Proxy \"http://$TARGET_ADDR\";" > $APT_CONF
+            echo "Acquire::https::Proxy \"http://$TARGET_ADDR\";" >> $APT_CONF
+            export http_proxy="http://$TARGET_ADDR"
+            export https_proxy="http://$TARGET_ADDR"
+            echo -e "${GREEN}配置已更新为 $TARGET_ADDR${NC}"
+            sleep 1
+            ;;
+        3)
+            [ -f "$APT_CONF" ] && rm "$APT_CONF"
+            unset http_proxy https_proxy all_proxy
+            echo -e "${RED}代理配置已清除。${NC}"
+            sleep 1
+            ;;
+        4)
+            continue
+            ;;
+        5)
+            echo "退出助手。"
+            break
+            ;;
+        *)
+            echo -e "${RED}无效选项，请重新输入。${NC}"
+            sleep 1
+            ;;
+    esac
+done
